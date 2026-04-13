@@ -1,4 +1,4 @@
 flask
-gunicorn
+flask-cors
 yt-dlp
-soundcloud-lib
+gunicorn

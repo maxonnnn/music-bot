@@ -22,7 +22,7 @@ def search():
                 first_result = info['entries'][0]
                 return jsonify({
                     'title': first_result.get('title'),
-                    'url': first_result.get('url'),
+                    'url': first_result.get('url_duration', [{}])[0].get('url'),
                     'duration': first_result.get('duration')
                 })
         except Exception:

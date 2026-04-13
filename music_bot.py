@@ -6,7 +6,7 @@ app = Flask(__name__)
 ydl_opts = {
     'format': 'bestaudio/best',
     'quiet': True,
-    'extract_flat': False,  # Меняем на False, чтобы получить полную информацию
+    'extract_flat': False,
 }
 
 @app.route('/search')
@@ -17,29 +17,24 @@ def search():
     
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Ищем видео
-            info = ydl.extract_info(f"ytsearch:{query}", download=False)
+            # Ищем на Deezer
+            info = ydl.extract_info(f"dzsearch:{query}", download=False)
             if 'entries' in info and info['entries']:
                 first_result = info['entries'][0]
                 
-                # Пробуем получить прямую ссылку на аудио
+                # Получаем прямую ссылку на аудио
                 audio_url = None
-                
-                # Вариант 1: если есть форматы
                 if 'formats' in first_result:
-                    # Ищем лучший аудиоформат (обычно m4a или webm)
                     for f in first_result['formats']:
                         if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
                             audio_url = f.get('url')
                             break
-                    # Если не нашли чистый аудио, берем первый с аудио
                     if not audio_url:
                         for f in first_result['formats']:
                             if f.get('acodec') != 'none':
                                 audio_url = f.get('url')
                                 break
                 
-                # Вариант 2: прямая ссылка из url
                 if not audio_url:
                     audio_url = first_result.get('url')
                 

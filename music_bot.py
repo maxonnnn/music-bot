@@ -17,14 +17,15 @@ def search():
     
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Ищем на Deezer
-            info = ydl.extract_info(f"dzsearch:{query}", download=False)
+            # Ищем на SoundCloud
+            info = ydl.extract_info(f"scsearch:{query}", download=False)
             if 'entries' in info and info['entries']:
                 first_result = info['entries'][0]
                 
                 # Получаем прямую ссылку на аудио
                 audio_url = None
                 if 'formats' in first_result:
+                    # Ищем чистый аудиоформат
                     for f in first_result['formats']:
                         if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
                             audio_url = f.get('url')
@@ -40,6 +41,7 @@ def search():
                 
                 return jsonify({
                     'title': first_result.get('title'),
+                    'artist': first_result.get('uploader'),
                     'url': audio_url,
                     'duration': first_result.get('duration')
                 })

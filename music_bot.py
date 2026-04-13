@@ -17,34 +17,25 @@ def search():
     
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Ищем на SoundCloud
-            info = ydl.extract_info(f"scsearch:{query}", download=False)
+            # Ищем на Spotify (spsearch:)
+            info = ydl.extract_info(f"spsearch:{query}", download=False)
             if 'entries' in info and info['entries']:
                 first_result = info['entries'][0]
                 
-                # Получаем прямую ссылку на аудио
+                # Получаем ссылку
                 audio_url = None
                 if 'formats' in first_result:
                     for f in first_result['formats']:
-                        if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
+                        if f.get('ext') == 'mp3' or f.get('acodec') != 'none':
                             audio_url = f.get('url')
                             break
-                    if not audio_url:
-                        for f in first_result['formats']:
-                            if f.get('acodec') != 'none':
-                                audio_url = f.get('url')
-                                break
                 
                 if not audio_url:
                     audio_url = first_result.get('url')
                 
-                # Если ссылка на плейлист, пробуем заменить на .mp3
-                if audio_url and audio_url.endswith('.m3u8'):
-                    audio_url = audio_url.replace('/playlist.m3u8', '.mp3')
-                
                 return jsonify({
                     'title': first_result.get('title'),
-                    'artist': first_result.get('uploader'),
+                    'artist': first_result.get('artist'),
                     'url': audio_url,
                     'duration': first_result.get('duration')
                 })

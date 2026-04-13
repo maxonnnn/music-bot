@@ -1,18 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 import yt_dlp as youtube_dl
+import io
+import os
 
 app = Flask(__name__)
-
-ydl_opts = {
-    'format': 'bestaudio/best',
-    'quiet': True,
-    'extract_flat': False,
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }],
-}
 
 @app.route('/search')
 def search():
@@ -20,42 +11,42 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
     
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'extract_flat': False,
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'outtmpl': 'downloaded_%(id)s.%(ext)s',
+    }
+    
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Ищем на SoundCloud
-            info = ydl.extract_info(f"scsearch:{query}", download=False)
+            # Ищем и скачиваем трек
+            info = ydl.extract_info(f"scsearch:{query}", download=True)
             if 'entries' in info and info['entries']:
                 first_result = info['entries'][0]
                 
-                # Пробуем получить ссылку на MP3
-                audio_url = None
+                # Путь к скачанному файлу
+                filename = ydl.prepare_filename(first_result).replace('.webm', '.mp3').replace('.m4a', '.mp3')
                 
-                # Сначала ищем в форматах
-                if 'formats' in first_result:
-                    for f in first_result['formats']:
-                        # Ищем MP3 или прямой аудиоформат
-                        if f.get('ext') in ['mp3', 'm4a', 'aac']:
-                            audio_url = f.get('url')
-                            break
-                        if f.get('acodec') != 'none' and f.get('vcodec') == 'none':
-                            audio_url = f.get('url')
-                            if audio_url and not audio_url.endswith('.m3u8'):
-                                break
+                # Читаем файл в память
+                with open(filename, 'rb') as f:
+                    audio_data = f.read()
                 
-                if not audio_url:
-                    audio_url = first_result.get('url')
+                # Удаляем временный файл
+                os.remove(filename)
                 
-                # Если ссылка ведёт на плейлист, добавляем параметр для конвертации
-                if audio_url and audio_url.endswith('.m3u8'):
-                    # Заменяем на возможную MP3-ссылку
-                    audio_url = audio_url.replace('/playlist.m3u8', '.mp3')
-                
-                return jsonify({
-                    'title': first_result.get('title'),
-                    'artist': first_result.get('uploader'),
-                    'url': audio_url,
-                    'duration': first_result.get('duration')
-                })
+                # Возвращаем MP3 как файл для скачивания
+                return send_file(
+                    io.BytesIO(audio_data),
+                    mimetype='audio/mpeg',
+                    as_attachment=True,
+                    download_name=f"{first_result.get('title')}.mp3"
+                )
         except Exception as e:
             return jsonify({'error': f'search failed: {str(e)}'}), 500
     

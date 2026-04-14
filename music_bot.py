@@ -6,9 +6,8 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Добавляем Deno и правильные параметры
 ydl_opts = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio[ext=mp3]/bestaudio',
     'quiet': True,
     'extract_flat': False,
     'cookiefile': 'cookies.txt',
@@ -18,11 +17,6 @@ ydl_opts = {
         'preferredquality': '192',
     }],
     'outtmpl': 'downloaded_%(id)s.%(ext)s',
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['ios', 'web'],  # android удалён — он сломан [citation:4]
-        }
-    }
 }
 
 @app.route('/search')
@@ -41,7 +35,7 @@ def search():
                             file,
                             mimetype='audio/mpeg',
                             as_attachment=True,
-                            download_name="track.mp3"
+                            download_name=f"track.mp3"
                         )
                 return jsonify({'error': 'download failed'}), 500
         except Exception as e:

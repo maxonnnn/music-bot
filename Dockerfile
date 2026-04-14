@@ -1,5 +1,5 @@
-FROM ghcr.io/matthewzhaocc/ytdl-api:latest
+FROM alexta69/metube:latest
 
-EXPOSE 8080
+EXPOSE 8081
 
-CMD ["node", "server.js"]
+CMD ["python", "-m", "metube"]

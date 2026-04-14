@@ -6,12 +6,12 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-# Список инстансов Piped API (источник: SoundBound)
+# Список рабочих инстансов Piped API
 PIPED_INSTANCES = [
-    "https://pipedapi.kavin.rocks",
     "https://pipedapi.adminforge.de",
     "https://pipedapi.projectsegfau.lt",
     "https://pipedapi.moomoo.me",
+    "https://pipedapi.kavin.rocks",
 ]
 
 def get_working_instance():
@@ -35,6 +35,7 @@ def search():
     try:
         search_url = f"{instance}/search?q={query}&filter=music_songs"
         response = requests.get(search_url, timeout=15)
+        response.raise_for_status()
         data = response.json()
         
         results = []
@@ -65,6 +66,7 @@ def download():
     try:
         stream_url = f"{instance}/streams/{video_id}"
         response = requests.get(stream_url, timeout=15)
+        response.raise_for_status()
         data = response.json()
         
         if 'audioStreams' in data and len(data['audioStreams']) > 0:

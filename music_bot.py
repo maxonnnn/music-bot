@@ -1,58 +1,86 @@
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
-import yt_dlp as youtube_dl
-import os
+from jiosaavn import JioSaavn
+import asyncio
+import io
+import requests
 
 app = Flask(__name__)
 CORS(app)
 
-# Опции, которые гарантированно найдут аудио
-ydl_opts = {
-    'format': 'bestaudio/best',
-    'quiet': True,
-    'extract_flat': False,
-    'cookiefile': 'cookies.txt',
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }],
-    'outtmpl': 'downloaded_%(id)s.%(ext)s',
-    # Ключевые параметры для обхода блокировок YouTube
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['ios', 'web'],
-            'skip': ['hls', 'dash'],
-        }
-    }
-}
+# Создаём клиент JioSaavn
+saavn = JioSaavn()
+
+def run_async(coro):
+    """Запускает асинхронную функцию"""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
 
 @app.route('/search')
 def search():
     query = request.args.get('query')
     if not query:
         return jsonify({'error': 'no query'}), 400
-
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Скачиваем и конвертируем в MP3
-            ydl.download([f"https://www.youtube.com/watch?v={query}"])
-            
-            # Находим скачанный файл
-            for file in os.listdir('.'):
-                if file.startswith('downloaded_') and file.endswith('.mp3'):
-                    return send_file(
-                        file,
-                        mimetype='audio/mpeg',
-                        as_attachment=True,
-                        download_name=f"track.mp3"
-                    )
-            return jsonify({'error': 'file not found'}), 500
+    
+    try:
+        # Поиск песен [citation:6][citation:8]
+        results = run_async(saavn.search_songs(query))
+        
+        if results and len(results) > 0:
+            # Форматируем результаты
+            tracks = []
+            for item in results[:10]:  # максимум 10 треков
+                # Получаем прямую ссылку на MP3 [citation:6]
+                song_id = item.get('id') or item.get('url')
+                if song_id:
+                    try:
+                        link_data = run_async(saavn.get_song_direct_link(song_id))
+                        mp3_url = link_data.get('link') if link_data else None
+                    except:
+                        mp3_url = None
+                else:
+                    mp3_url = None
                 
-        except Exception as e:
-            return jsonify({'error': f'search failed: {str(e)}'}), 500
+                tracks.append({
+                    'id': item.get('id'),
+                    'title': item.get('song') or item.get('title'),
+                    'artist': item.get('primary_artists') or item.get('artist'),
+                    'album': item.get('album'),
+                    'duration': item.get('duration'),
+                    'url': mp3_url,
+                    'thumbnail': item.get('image')
+                })
+            
+            return jsonify(tracks)
+        return jsonify([])
+    
+    except Exception as e:
+        return jsonify({'error': f'search failed: {str(e)}'}), 500
 
-    return jsonify({'error': 'not found'}), 404
+@app.route('/download')
+def download():
+    url = request.args.get('url')
+    if not url:
+        return jsonify({'error': 'no url'}), 400
+    
+    try:
+        # Скачиваем MP3 через requests
+        response = requests.get(url, timeout=30)
+        if response.status_code == 200:
+            return send_file(
+                io.BytesIO(response.content),
+                mimetype='audio/mpeg',
+                as_attachment=True,
+                download_name='track.mp3'
+            )
+        else:
+            return jsonify({'error': 'download failed'}), 500
+    except Exception as e:
+        return jsonify({'error': f'download error: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)

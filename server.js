@@ -1,35 +1,39 @@
 const express = require('express');
 const cors = require('cors');
-const ytdl = require('ytdl-core');
+const axios = require('axios');
 
 const app = express();
 app.use(cors());
 
-app.get('/download', async (req, res) => {
-    const videoId = req.query.id;
-    if (!videoId) return res.status(400).json({ error: 'no id' });
-    
-    const url = `https://www.youtube.com/watch?v=${videoId}`;
+// Прокси для любого URL
+app.get('/proxy', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).json({ error: 'no url' });
     
     try {
-        // Получаем информацию о видео
-        const info = await ytdl.getInfo(url);
-        
-        // Находим аудиоформат (без видео)
-        const audioFormat = info.formats.find(f => 
-            f.hasAudio === true && f.hasVideo === false
-        );
-        
-        if (!audioFormat) throw new Error('No audio format found');
-        
-        // Скачиваем и отдаём потоком
-        res.setHeader('Content-Type', 'audio/mpeg');
-        ytdl(url, { format: audioFormat }).pipe(res);
-        
+        const response = await axios.get(targetUrl, { responseType: 'arraybuffer' });
+        res.set('Access-Control-Allow-Origin', '*');
+        res.send(response.data);
     } catch (error) {
-        console.error('Download error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
-app.listen(3000, () => console.log('Server running'));
+// Скачивание MP3 через ytdl
+app.get('/download', async (req, res) => {
+    const videoId = req.query.id;
+    if (!videoId) return res.status(400).json({ error: 'no id' });
+    
+    try {
+        const ytdl = require('ytdl-core');
+        const info = await ytdl.getInfo(videoId);
+        const audioFormat = info.formats.find(f => f.hasAudio && !f.hasVideo);
+        
+        res.set('Access-Control-Allow-Origin', '*');
+        ytdl(videoId, { format: audioFormat }).pipe(res);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.listen(3000, () => console.log('Proxy running'));

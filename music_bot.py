@@ -16,7 +16,7 @@ ydl_opts = {
     # Указываем использовать Deno для решения JS-задач
     'js_runtimes': {'deno': {}},
     # Указываем файл с куками
-    'cookiefile': 'cookies.txt',
+    # 'cookiefile': 'cookies.txt',
     # Скачиваем и конвертируем в MP3
     'postprocessors': [{
         'key': 'FFmpegExtractAudio',

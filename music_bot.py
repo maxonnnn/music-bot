@@ -5,16 +5,11 @@ import yt_dlp as youtube_dl
 app = Flask(__name__)
 CORS(app)
 
+# Опции для yt-dlp с попыткой обойти блокировку YouTube
 ydl_opts = {
     'format': 'bestaudio/best',
     'quiet': True,
     'extract_flat': False,
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }],
-    # Пытаемся использовать разные клиенты, чтобы обойти блокировку
     'extractor_args': {
         'youtube': {
             'player_client': ['android', 'web'],
@@ -30,12 +25,12 @@ def search():
 
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Ищем и получаем информацию о первом треке
+            # Ищем первый результат
             info = ydl.extract_info(f"ytsearch1:{query}", download=False)
             if 'entries' in info and info['entries']:
                 first_result = info['entries'][0]
 
-                # Получаем ссылку на поток
+                # Получаем ссылку на аудиопоток
                 audio_url = first_result.get('url')
                 if not audio_url and 'formats' in first_result:
                     for f in first_result['formats']:
@@ -44,7 +39,6 @@ def search():
                             break
 
                 return jsonify({
-                    'id': first_result.get('id'),
                     'title': first_result.get('title'),
                     'artist': first_result.get('uploader'),
                     'url': audio_url,

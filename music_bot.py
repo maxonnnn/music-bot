@@ -6,8 +6,8 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-JAMENDO_API = "https://api.jamendo.com/v3.0/tracks"
-JAMENDO_CLIENT_ID = "ca29f9b5"  # Публичный ID
+# Публичный прокси для JioSaavn
+PROXY_API = "https://jiosaavn-api.vercel.app"
 
 @app.route('/search')
 def search():
@@ -15,29 +15,20 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
     
-    params = {
-        'client_id': JAMENDO_CLIENT_ID,
-        'format': 'json',
-        'limit': 10,
-        'search': query,
-        'audioformat': 'mp32'
-    }
-    
     try:
-        response = requests.get(JAMENDO_API, params=params, timeout=15)
+        response = requests.get(f"{PROXY_API}/api/search?query={query}&limit=10", timeout=15)
         data = response.json()
         
         results = []
-        if 'results' in data:
-            for track in data['results']:
+        if 'data' in data and 'results' in data['data']:
+            for song in data['data']['results']:
                 results.append({
-                    'id': track.get('id'),
-                    'title': track.get('name'),
-                    'artist': track.get('artist_name'),
-                    'album': track.get('album_name'),
-                    'duration': track.get('duration'),
-                    'thumbnail': track.get('image'),
-                    'url': f"/download?id={track.get('id')}"
+                    'id': song.get('id'),
+                    'title': song.get('name'),
+                    'artist': song.get('artists', {}).get('primary', [{}])[0].get('name') if song.get('artists') else 'Unknown',
+                    'duration': song.get('duration'),
+                    'thumbnail': song.get('image', [{}])[2].get('link') if song.get('image') else None,
+                    'url': f"/download?id={song.get('id')}"
                 })
         
         return jsonify(results)
@@ -46,21 +37,25 @@ def search():
 
 @app.route('/download')
 def download():
-    track_id = request.args.get('id')
-    if not track_id:
+    song_id = request.args.get('id')
+    if not song_id:
         return jsonify({'error': 'no id'}), 400
     
-    # Jamendo отдаёт прямую ссылку на MP3
-    mp3_url = f"https://api.jamendo.com/v3.0/tracks/file?client_id={JAMENDO_CLIENT_ID}&id={track_id}"
-    
     try:
-        audio_response = requests.get(mp3_url, timeout=30)
-        return send_file(
-            io.BytesIO(audio_response.content),
-            mimetype='audio/mpeg',
-            as_attachment=True,
-            download_name=f"{track_id}.mp3"
-        )
+        response = requests.get(f"{PROXY_API}/api/songs/{song_id}", timeout=15)
+        data = response.json()
+        
+        if 'data' in data and 'downloadUrl' in data['data']:
+            mp3_url = data['data']['downloadUrl'][4]['link']
+            audio_response = requests.get(mp3_url, timeout=30)
+            return send_file(
+                io.BytesIO(audio_response.content),
+                mimetype='audio/mpeg',
+                as_attachment=True,
+                download_name=f"{song_id}.mp3"
+            )
+        else:
+            return jsonify({'error': 'no mp3 url'}), 500
     except Exception as e:
         return jsonify({'error': f'download error: {str(e)}'}), 500
 

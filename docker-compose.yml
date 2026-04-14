@@ -3,12 +3,10 @@ version: '3.8'
 services:
   metube:
     image: ghcr.io/alexta69/metube:latest
-    container_name: metube
     ports:
       - "8081:8081"
     volumes:
-      - ./downloads:/downloads
       - ./cookies:/cookies
     environment:
-      - YTDL_OPTIONS={"cookiefile":"/cookies/cookies.txt"}
+      - YTDL_OPTIONS={"cookiefile":"/cookies/cookies.txt","format":"bestaudio[ext=webm]/bestaudio"}
     restart: unless-stopped

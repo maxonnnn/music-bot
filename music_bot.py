@@ -3,10 +3,10 @@ from flask_cors import CORS
 import requests
 
 app = Flask(__name__)
-CORS(app)  # Это решает твою проблему с CORS!
+CORS(app)
 
-# Прямой URL к API, который всегда работает
-API_URL = "https://saavn.dev/api"
+# Стабильный публичный API, который работает через Cloudflare
+PROXY_API = "https://api.saavn.me"
 
 @app.route('/search')
 def search():
@@ -14,15 +14,15 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
     
-    # Делаем запрос к API Saavn
-    search_url = f"{API_URL}/search/songs?query={query}&limit=10"
+    # Формируем запрос к API
+    search_url = f"{PROXY_API}/search/songs?query={query}&limit=10"
+    
     try:
-        response = requests.get(search_url)
+        response = requests.get(search_url, timeout=10)
         data = response.json()
         
-        # API Saavn возвращает данные в поле 'data'
         if data and data.get('data', {}).get('results'):
-            # Просто возвращаем данные как есть
+            # Возвращаем данные в нужном формате
             return jsonify({
                 'code': 200,
                 'data': {
@@ -31,8 +31,11 @@ def search():
             })
         else:
             return jsonify({'error': 'no results', 'data': {'list': []}}), 404
+            
+    except requests.exceptions.Timeout:
+        return jsonify({'error': 'request timeout'}), 500
     except Exception as e:
-        print(f"Error: {e}")  # Логируем ошибку на сервере
+        print(f"Error: {e}")
         return jsonify({'error': f'search failed: {str(e)}'}), 500
 
 if __name__ == '__main__':

@@ -1,4 +1,4 @@
-FROM ghcr.io/yeahhub/ytdl-api:latest
+FROM ghcr.io/matthewzhaocc/ytdl-api:latest
 
 EXPOSE 8080
 

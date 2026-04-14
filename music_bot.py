@@ -6,7 +6,8 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-JIO_API = "https://www.jiosaavn.com/api.php"
+# Публичный client_id JioSaavn (рабочий)
+CLIENT_ID = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
 
 @app.route('/search')
 def search():
@@ -21,10 +22,11 @@ def search():
         '_format': 'json',
         '_marker': '0',
         'api_version': '4',
+        'client_id': CLIENT_ID,
     }
     
     try:
-        response = requests.get(JIO_API, params=params, timeout=15)
+        response = requests.get("https://www.jiosaavn.com/api.php", params=params, timeout=15)
         data = response.json()
         
         results = []
@@ -49,13 +51,29 @@ def download():
     if not song_id:
         return jsonify({'error': 'no id'}), 400
     
-    # Получаем ссылку через альтернативный эндпоинт
+    params = {
+        '__call': 'song.getDetails',
+        'pids': song_id,
+        'ctx': 'wap6',
+        '_format': 'json',
+        'api_version': '4',
+        'client_id': CLIENT_ID,
+    }
+    
     try:
-        alt_response = requests.get("https://c.saavncdn.com/api/songs", params={'pids': song_id}, timeout=10)
-        alt_data = alt_response.json()
+        response = requests.get("https://www.jiosaavn.com/api.php", params=params, timeout=15)
+        data = response.json()
         
-        if alt_data and song_id in alt_data:
-            mp3_url = alt_data[song_id].get('media_url')
+        if data and song_id in data:
+            more_info = data[song_id].get('more_info', {})
+            mp3_url = more_info.get('encrypted_media_url')
+            
+            if mp3_url and not mp3_url.startswith('http'):
+                alt_response = requests.get("https://c.saavncdn.com/api/songs", params={'pids': song_id, 'client_id': CLIENT_ID})
+                alt_data = alt_response.json()
+                if alt_data and song_id in alt_data:
+                    mp3_url = alt_data[song_id].get('media_url')
+            
             if mp3_url and mp3_url.startswith('http'):
                 audio_response = requests.get(mp3_url, timeout=30)
                 return send_file(

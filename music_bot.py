@@ -1,30 +1,13 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-import yt_dlp as youtube_dl
-import os
-import time
+import requests
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Это решает проблему CORS для вашего плеера!
 
-# Расширенные настройки для обхода блокировок YouTube
-ydl_opts = {
-    'format': 'bestaudio/best',
-    'quiet': True,
-    'no_warnings': True,
-    'extract_flat': False,
-    # Указываем использовать Deno для решения JS-задач
-    'js_runtimes': {'deno': {}},
-    # Указываем файл с куками
-    # 'cookiefile': 'cookies.txt',
-    # Скачиваем и конвертируем в MP3
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-        'preferredquality': '192',
-    }],
-    'outtmpl': 'downloaded_%(id)s.%(ext)s',
-}
+# Это адрес нашего нового, мощного API
+# (Вы можете оставить его как есть, он публичный и стабильный)
+MUZO_API_URL = "https://muzo-backend.vercel.app/api"
 
 @app.route('/search')
 def search():
@@ -32,35 +15,22 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
 
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Ищем ТОЛЬКО первый результат (ytsearch1)
-            info = ydl.extract_info(f"ytsearch1:{query}", download=True)
-            if 'entries' in info and info['entries']:
-                first_result = info['entries'][0]
+    # Формируем запрос к Muzo-backend
+    search_url = f"{MUZO_API_URL}/search?q={query}&filter=songs&limit=10"
+    try:
+        # Делаем запрос к API
+        response = requests.get(search_url)
+        data = response.json()
 
-                # Ищем скачанный MP3 файл
-                downloaded_file = None
-                for file in os.listdir('.'):
-                    if file.startswith('downloaded_') and file.endswith('.mp3'):
-                        downloaded_file = file
-                        break
-
-                if downloaded_file:
-                    # Отправляем файл плееру
-                    return send_file(
-                        downloaded_file,
-                        mimetype='audio/mpeg',
-                        as_attachment=True,
-                        download_name=f"{first_result.get('uploader')} - {first_result.get('title')}.mp3"
-                    )
-                else:
-                    return jsonify({'error': 'download failed: file not found'}), 500
-
-        except Exception as e:
-            return jsonify({'error': f'search failed: {str(e)}'}), 500
-
-    return jsonify({'error': 'not found'}), 404
+        if data and data.get('success') and data.get('results'):
+            # API вернул список треков. Мы просто возвращаем его вашему плееру.
+            return jsonify(data['results'])
+        else:
+            return jsonify([])
+    except Exception as e:
+        # Логируем ошибку на сервере (поможет при отладке)
+        print(f"Error: {e}")
+        return jsonify({'error': f'search failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)

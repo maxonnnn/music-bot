@@ -1,16 +1,29 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import yt_dlp as youtube_dl
+import os
+import time
 
 app = Flask(__name__)
 CORS(app)
 
-# Опции для yt-dlp с использованием кук
+# Расширенные настройки для обхода блокировок YouTube
 ydl_opts = {
     'format': 'bestaudio/best',
     'quiet': True,
+    'no_warnings': True,
     'extract_flat': False,
-    'cookiefile': 'cookies.txt',  # Файл с куками
+    # Указываем использовать Deno для решения JS-задач
+    'js_runtimes': {'deno': {}},
+    # Указываем файл с куками
+    'cookiefile': 'cookies.txt',
+    # Скачиваем и конвертируем в MP3
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',
+        'preferredcodec': 'mp3',
+        'preferredquality': '192',
+    }],
+    'outtmpl': 'downloaded_%(id)s.%(ext)s',
 }
 
 @app.route('/search')
@@ -21,27 +34,29 @@ def search():
 
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         try:
-            # Ищем первый результат на YouTube
-            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+            # Ищем ТОЛЬКО первый результат (ytsearch1)
+            info = ydl.extract_info(f"ytsearch1:{query}", download=True)
             if 'entries' in info and info['entries']:
                 first_result = info['entries'][0]
-                
-                # Получаем ссылку на аудиопоток
-                audio_url = first_result.get('url')
-                if not audio_url and 'formats' in first_result:
-                    for f in first_result['formats']:
-                        if f.get('vcodec') == 'none':
-                            audio_url = f.get('url')
-                            break
 
-                return jsonify({
-                    'id': first_result.get('id'),
-                    'title': first_result.get('title'),
-                    'artist': first_result.get('uploader'),
-                    'url': audio_url,
-                    'duration': first_result.get('duration'),
-                    'thumbnail': first_result.get('thumbnail')
-                })
+                # Ищем скачанный MP3 файл
+                downloaded_file = None
+                for file in os.listdir('.'):
+                    if file.startswith('downloaded_') and file.endswith('.mp3'):
+                        downloaded_file = file
+                        break
+
+                if downloaded_file:
+                    # Отправляем файл плееру
+                    return send_file(
+                        downloaded_file,
+                        mimetype='audio/mpeg',
+                        as_attachment=True,
+                        download_name=f"{first_result.get('uploader')} - {first_result.get('title')}.mp3"
+                    )
+                else:
+                    return jsonify({'error': 'download failed: file not found'}), 500
+
         except Exception as e:
             return jsonify({'error': f'search failed: {str(e)}'}), 500
 

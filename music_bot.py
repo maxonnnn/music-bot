@@ -6,8 +6,8 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-# Публичный client_id JioSaavn (рабочий)
-CLIENT_ID = "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+JAMENDO_API = "https://api.jamendo.com/v3.0/tracks"
+JAMENDO_CLIENT_ID = "ca29f9b5"  # Публичный ID
 
 @app.route('/search')
 def search():
@@ -16,29 +16,28 @@ def search():
         return jsonify({'error': 'no query'}), 400
     
     params = {
-        '__call': 'autocomplete.get',
-        'ctx': 'wap6',
-        'query': query,
-        '_format': 'json',
-        '_marker': '0',
-        'api_version': '4',
-        'client_id': CLIENT_ID,
+        'client_id': JAMENDO_CLIENT_ID,
+        'format': 'json',
+        'limit': 10,
+        'search': query,
+        'audioformat': 'mp32'
     }
     
     try:
-        response = requests.get("https://www.jiosaavn.com/api.php", params=params, timeout=15)
+        response = requests.get(JAMENDO_API, params=params, timeout=15)
         data = response.json()
         
         results = []
-        if 'songs' in data and data['songs']['data']:
-            for song in data['songs']['data']:
+        if 'results' in data:
+            for track in data['results']:
                 results.append({
-                    'id': song.get('id'),
-                    'title': song.get('title'),
-                    'artist': song.get('more_info', {}).get('primary_artists'),
-                    'duration': song.get('more_info', {}).get('duration'),
-                    'thumbnail': song.get('image'),
-                    'url': f"/download?id={song.get('id')}"
+                    'id': track.get('id'),
+                    'title': track.get('name'),
+                    'artist': track.get('artist_name'),
+                    'album': track.get('album_name'),
+                    'duration': track.get('duration'),
+                    'thumbnail': track.get('image'),
+                    'url': f"/download?id={track.get('id')}"
                 })
         
         return jsonify(results)
@@ -47,43 +46,21 @@ def search():
 
 @app.route('/download')
 def download():
-    song_id = request.args.get('id')
-    if not song_id:
+    track_id = request.args.get('id')
+    if not track_id:
         return jsonify({'error': 'no id'}), 400
     
-    params = {
-        '__call': 'song.getDetails',
-        'pids': song_id,
-        'ctx': 'wap6',
-        '_format': 'json',
-        'api_version': '4',
-        'client_id': CLIENT_ID,
-    }
+    # Jamendo отдаёт прямую ссылку на MP3
+    mp3_url = f"https://api.jamendo.com/v3.0/tracks/file?client_id={JAMENDO_CLIENT_ID}&id={track_id}"
     
     try:
-        response = requests.get("https://www.jiosaavn.com/api.php", params=params, timeout=15)
-        data = response.json()
-        
-        if data and song_id in data:
-            more_info = data[song_id].get('more_info', {})
-            mp3_url = more_info.get('encrypted_media_url')
-            
-            if mp3_url and not mp3_url.startswith('http'):
-                alt_response = requests.get("https://c.saavncdn.com/api/songs", params={'pids': song_id, 'client_id': CLIENT_ID})
-                alt_data = alt_response.json()
-                if alt_data and song_id in alt_data:
-                    mp3_url = alt_data[song_id].get('media_url')
-            
-            if mp3_url and mp3_url.startswith('http'):
-                audio_response = requests.get(mp3_url, timeout=30)
-                return send_file(
-                    io.BytesIO(audio_response.content),
-                    mimetype='audio/mpeg',
-                    as_attachment=True,
-                    download_name=f"{song_id}.mp3"
-                )
-        
-        return jsonify({'error': 'no mp3 url'}), 500
+        audio_response = requests.get(mp3_url, timeout=30)
+        return send_file(
+            io.BytesIO(audio_response.content),
+            mimetype='audio/mpeg',
+            as_attachment=True,
+            download_name=f"{track_id}.mp3"
+        )
     except Exception as e:
         return jsonify({'error': f'download error: {str(e)}'}), 500
 

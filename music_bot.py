@@ -1,42 +1,51 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import requests
+import yt_dlp as youtube_dl
 
 app = Flask(__name__)
 CORS(app)
 
-# Стабильный публичный API, который работает через Cloudflare
-PROXY_API = "https://api.saavn.me"
+# Опции для yt-dlp с использованием кук
+ydl_opts = {
+    'format': 'bestaudio/best',
+    'quiet': True,
+    'extract_flat': False,
+    'cookiefile': 'cookies.txt',  # Файл с куками
+}
 
 @app.route('/search')
 def search():
     query = request.args.get('query')
     if not query:
         return jsonify({'error': 'no query'}), 400
-    
-    # Формируем запрос к API
-    search_url = f"{PROXY_API}/search/songs?query={query}&limit=10"
-    
-    try:
-        response = requests.get(search_url, timeout=10)
-        data = response.json()
-        
-        if data and data.get('data', {}).get('results'):
-            # Возвращаем данные в нужном формате
-            return jsonify({
-                'code': 200,
-                'data': {
-                    'list': data['data']['results']
-                }
-            })
-        else:
-            return jsonify({'error': 'no results', 'data': {'list': []}}), 404
-            
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'request timeout'}), 500
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({'error': f'search failed: {str(e)}'}), 500
+
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        try:
+            # Ищем первый результат на YouTube
+            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+            if 'entries' in info and info['entries']:
+                first_result = info['entries'][0]
+                
+                # Получаем ссылку на аудиопоток
+                audio_url = first_result.get('url')
+                if not audio_url and 'formats' in first_result:
+                    for f in first_result['formats']:
+                        if f.get('vcodec') == 'none':
+                            audio_url = f.get('url')
+                            break
+
+                return jsonify({
+                    'id': first_result.get('id'),
+                    'title': first_result.get('title'),
+                    'artist': first_result.get('uploader'),
+                    'url': audio_url,
+                    'duration': first_result.get('duration'),
+                    'thumbnail': first_result.get('thumbnail')
+                })
+        except Exception as e:
+            return jsonify({'error': f'search failed: {str(e)}'}), 500
+
+    return jsonify({'error': 'not found'}), 404
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)

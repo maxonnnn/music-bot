@@ -1,54 +1,52 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import yt_dlp as youtube_dl
+import requests
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # Это решает твою проблему с CORS!
 
-# Опции для yt-dlp с попыткой обойти блокировку YouTube
-ydl_opts = {
-    'format': 'bestaudio/best',
-    'quiet': True,
-    'extract_flat': False,
-    'extractor_args': {
-        'youtube': {
-            'player_client': ['android', 'web'],
-        }
-    }
-}
+# Это адрес API, который мы используем
+GEQUHAI_API_URL = "https://www.gequhai.com/api"
 
 @app.route('/search')
 def search():
     query = request.args.get('query')
     if not query:
         return jsonify({'error': 'no query'}), 400
+    
+    # Отправляем запрос на Gequhai API для поиска
+    search_url = f"{GEQUHAI_API_URL}/music?search={query}"
+    try:
+        response = requests.get(search_url)
+        data = response.json()
+        
+        if data and data.get('code') == 200:
+            # Возвращаем результат прямо из API
+            return jsonify(data)
+        else:
+            return jsonify({'error': 'no results', 'data': {'list': []}}), 404
+    except Exception as e:
+        return jsonify({'error': f'search failed: {str(e)}'}), 500
 
-    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-        try:
-            # Ищем первый результат
-            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-            if 'entries' in info and info['entries']:
-                first_result = info['entries'][0]
-
-                # Получаем ссылку на аудиопоток
-                audio_url = first_result.get('url')
-                if not audio_url and 'formats' in first_result:
-                    for f in first_result['formats']:
-                        if f.get('vcodec') == 'none':
-                            audio_url = f.get('url')
-                            break
-
-                return jsonify({
-                    'title': first_result.get('title'),
-                    'artist': first_result.get('uploader'),
-                    'url': audio_url,
-                    'duration': first_result.get('duration'),
-                    'thumbnail': first_result.get('thumbnail')
-                })
-        except Exception as e:
-            return jsonify({'error': f'search failed: {str(e)}'}), 500
-
-    return jsonify({'error': 'not found'}), 404
+@app.route('/info')
+def info():
+    track_id = request.args.get('id')
+    if not track_id:
+        return jsonify({'error': 'no id'}), 400
+    
+    # Отправляем запрос на Gequhai API для получения ссылки на MP3
+    info_url = f"{GEQUHAI_API_URL}/music/info?id={track_id}"
+    try:
+        response = requests.get(info_url)
+        data = response.json()
+        
+        if data and data.get('code') == 200:
+            # Возвращаем результат прямо из API
+            return jsonify(data)
+        else:
+            return jsonify({'error': 'info not found'}), 404
+    except Exception as e:
+        return jsonify({'error': f'info failed: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)

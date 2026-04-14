@@ -12,7 +12,6 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
     
-    # Тот же API, что использует SoundBound
     params = {
         '__call': 'autocomplete.get',
         'ctx': 'wap6',
@@ -48,10 +47,7 @@ def download():
     if not song_id:
         return jsonify({'error': 'no id'}), 400
     
-    # Пробуем несколько способов получить MP3 (как в SoundBound)
-    mp3_url = None
-    
-    # Способ 1: прямой запрос к JioSaavn API
+    # Как SoundBound: сначала пробуем через основной API
     params = {
         '__call': 'song.getDetails',
         'pids': song_id,
@@ -66,44 +62,27 @@ def download():
         
         if data and song_id in data:
             more_info = data[song_id].get('more_info', {})
-            mp3_url = more_info.get('media_preview_url')
-            if not mp3_url:
-                mp3_url = more_info.get('encrypted_media_url')
-    except:
-        pass
-    
-    # Способ 2: через альтернативный API
-    if not mp3_url or not mp3_url.startswith('http'):
-        try:
-            alt_response = requests.get("https://c.saavncdn.com/api/songs", params={'pids': song_id}, timeout=10)
-            alt_data = alt_response.json()
-            if alt_data and song_id in alt_data:
-                mp3_url = alt_data[song_id].get('media_url')
-        except:
-            pass
-    
-    # Способ 3: через публичный прокси (запасной)
-    if not mp3_url or not mp3_url.startswith('http'):
-        try:
-            proxy_response = requests.get(f"https://jiosaavn-proxy.vercel.app/api/song/{song_id}", timeout=10)
-            proxy_data = proxy_response.json()
-            mp3_url = proxy_data.get('url') or proxy_data.get('media_url')
-        except:
-            pass
-    
-    if mp3_url and mp3_url.startswith('http'):
-        try:
-            audio_response = requests.get(mp3_url, timeout=30)
-            return send_file(
-                io.BytesIO(audio_response.content),
-                mimetype='audio/mpeg',
-                as_attachment=True,
-                download_name=f"{song_id}.mp3"
-            )
-        except Exception as e:
-            return jsonify({'error': f'download failed: {str(e)}'}), 500
-    
-    return jsonify({'error': 'no mp3 url'}), 500
+            encrypted_url = more_info.get('encrypted_media_url')
+            
+            # SoundBound расшифровывает encrypted_url через отдельный запрос
+            if encrypted_url:
+                # Пробуем альтернативный эндпоинт (как в SoundBound)
+                alt_response = requests.get("https://c.saavncdn.com/api/songs", params={'pids': song_id}, timeout=10)
+                alt_data = alt_response.json()
+                if alt_data and song_id in alt_data:
+                    mp3_url = alt_data[song_id].get('media_url')
+                    if mp3_url and mp3_url.startswith('http'):
+                        audio_response = requests.get(mp3_url, timeout=30)
+                        return send_file(
+                            io.BytesIO(audio_response.content),
+                            mimetype='audio/mpeg',
+                            as_attachment=True,
+                            download_name=f"{song_id}.mp3"
+                        )
+        
+        return jsonify({'error': 'no mp3 url'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)

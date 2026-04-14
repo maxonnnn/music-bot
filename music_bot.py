@@ -6,7 +6,7 @@ import io
 app = Flask(__name__)
 CORS(app)
 
-# Публичный API JioSaavn (работает без ключей)
+# Публичный API JioSaavn
 JIO_SAVAN_API = "https://www.jiosaavn.com/api.php"
 
 @app.route('/search')
@@ -15,7 +15,6 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
     
-    # Параметры для поиска
     params = {
         '__call': 'autocomplete.get',
         'ctx': 'wap6',
@@ -32,15 +31,14 @@ def search():
         results = []
         if 'songs' in data and data['songs']['data']:
             for song in data['songs']['data']:
-                song_id = song.get('id')
                 results.append({
-                    'id': song_id,
+                    'id': song.get('id'),
                     'title': song.get('title'),
                     'artist': song.get('more_info', {}).get('primary_artists'),
                     'album': song.get('more_info', {}).get('album'),
                     'duration': song.get('more_info', {}).get('duration'),
-                    'url': f"https://music-bot.onrender.com/download?id={song_id}",
-                    'thumbnail': song.get('image')
+                    'thumbnail': song.get('image'),
+                    'url': f"https://music-bot.onrender.com/download?id={song.get('id')}"
                 })
         
         return jsonify(results)
@@ -54,7 +52,7 @@ def download():
     if not song_id:
         return jsonify({'error': 'no id'}), 400
     
-    # Получаем ссылку на MP3
+    # Получаем прямую ссылку на MP3
     params = {
         '__call': 'song.getDetails',
         'ctx': 'wap6',

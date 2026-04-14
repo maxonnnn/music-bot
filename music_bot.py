@@ -8,11 +8,9 @@ import requests
 app = Flask(__name__)
 CORS(app)
 
-# Создаём клиент JioSaavn
 saavn = JioSaavn()
 
 def run_async(coro):
-    """Запускает асинхронную функцию"""
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -27,34 +25,19 @@ def search():
         return jsonify({'error': 'no query'}), 400
     
     try:
-        # Поиск песен [citation:6][citation:8]
         results = run_async(saavn.search_songs(query))
         
         if results and len(results) > 0:
-            # Форматируем результаты
             tracks = []
-            for item in results[:10]:  # максимум 10 треков
-                # Получаем прямую ссылку на MP3 [citation:6]
-                song_id = item.get('id') or item.get('url')
-                if song_id:
-                    try:
-                        link_data = run_async(saavn.get_song_direct_link(song_id))
-                        mp3_url = link_data.get('link') if link_data else None
-                    except:
-                        mp3_url = None
-                else:
-                    mp3_url = None
-                
+            for item in results[:10]:
                 tracks.append({
                     'id': item.get('id'),
                     'title': item.get('song') or item.get('title'),
                     'artist': item.get('primary_artists') or item.get('artist'),
-                    'album': item.get('album'),
                     'duration': item.get('duration'),
-                    'url': mp3_url,
+                    'url': f"https://music-bot.onrender.com/download?id={item.get('id')}",
                     'thumbnail': item.get('image')
                 })
-            
             return jsonify(tracks)
         return jsonify([])
     
@@ -63,14 +46,16 @@ def search():
 
 @app.route('/download')
 def download():
-    url = request.args.get('url')
-    if not url:
-        return jsonify({'error': 'no url'}), 400
+    song_id = request.args.get('id')
+    if not song_id:
+        return jsonify({'error': 'no id'}), 400
     
     try:
-        # Скачиваем MP3 через requests
-        response = requests.get(url, timeout=30)
-        if response.status_code == 200:
+        link_data = run_async(saavn.get_song_direct_link(song_id))
+        mp3_url = link_data.get('link')
+        
+        if mp3_url:
+            response = requests.get(mp3_url, timeout=30)
             return send_file(
                 io.BytesIO(response.content),
                 mimetype='audio/mpeg',
@@ -78,7 +63,7 @@ def download():
                 download_name='track.mp3'
             )
         else:
-            return jsonify({'error': 'download failed'}), 500
+            return jsonify({'error': 'no link'}), 500
     except Exception as e:
         return jsonify({'error': f'download error: {str(e)}'}), 500
 

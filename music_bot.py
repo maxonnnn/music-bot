@@ -13,21 +13,18 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
     
-    # Укажи движок, 'gaama' (JioSaavn) — самый стабильный и полный
-    engine = 'gaama'
-    
-    # Твой сервер делает запрос к API
-    api_url = f"{API_BASE_URL}/search?q={query}&searchEngine={engine}"
+    # Параметр 'limit' просит API вернуть больше треков
+    api_url = f"{API_BASE_URL}/search?q={query}&limit=10"
     
     try:
         response = requests.get(api_url)
         data = response.json()
         
+        # API возвращает список треков в поле 'response'
         if data and data.get('status') == 200:
-            # Твой сервер возвращает результат плееру
             return jsonify(data.get('response', []))
         else:
-            return jsonify({'error': 'no results'}), 404
+            return jsonify([])
     except Exception as e:
         return jsonify({'error': f'search failed: {str(e)}'}), 500
 

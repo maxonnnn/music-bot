@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const ytdl = require('@distube/ytdl-core');
+const ytdl = require('ytdl-core');
 
 const app = express();
 app.use(cors());
@@ -15,11 +15,10 @@ app.get('/download', async (req, res) => {
         // Получаем информацию о видео
         const info = await ytdl.getInfo(url);
         
-        // Выбираем аудиоформат с помощью chooseFormat [citation:2]
-        const audioFormat = ytdl.chooseFormat(info.formats, { 
-            quality: 'highestaudio',
-            filter: 'audioonly' 
-        });
+        // Находим аудиоформат (без видео)
+        const audioFormat = info.formats.find(f => 
+            f.hasAudio === true && f.hasVideo === false
+        );
         
         if (!audioFormat) throw new Error('No audio format found');
         

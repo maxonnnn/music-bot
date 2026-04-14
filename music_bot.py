@@ -1,22 +1,13 @@
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
-from jiosaavn import JioSaavn
-import asyncio
-import io
 import requests
+import io
 
 app = Flask(__name__)
 CORS(app)
 
-saavn = JioSaavn()
-
-def run_async(coro):
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+# Публичный API JioSaavn (работает без ключей)
+JIO_SAVAN_API = "https://www.jiosaavn.com/api.php"
 
 @app.route('/search')
 def search():
@@ -24,22 +15,35 @@ def search():
     if not query:
         return jsonify({'error': 'no query'}), 400
     
+    # Параметры для поиска
+    params = {
+        '__call': 'autocomplete.get',
+        'ctx': 'wap6',
+        'query': query,
+        '_format': 'json',
+        '_marker': '0',
+        'api_version': '4',
+    }
+    
     try:
-        results = run_async(saavn.search_songs(query))
+        response = requests.get(JIO_SAVAN_API, params=params, timeout=15)
+        data = response.json()
         
-        if results and len(results) > 0:
-            tracks = []
-            for item in results[:10]:
-                tracks.append({
-                    'id': item.get('id'),
-                    'title': item.get('song') or item.get('title'),
-                    'artist': item.get('primary_artists') or item.get('artist'),
-                    'duration': item.get('duration'),
-                    'url': f"https://music-bot.onrender.com/download?id={item.get('id')}",
-                    'thumbnail': item.get('image')
+        results = []
+        if 'songs' in data and data['songs']['data']:
+            for song in data['songs']['data']:
+                song_id = song.get('id')
+                results.append({
+                    'id': song_id,
+                    'title': song.get('title'),
+                    'artist': song.get('more_info', {}).get('primary_artists'),
+                    'album': song.get('more_info', {}).get('album'),
+                    'duration': song.get('more_info', {}).get('duration'),
+                    'url': f"https://music-bot.onrender.com/download?id={song_id}",
+                    'thumbnail': song.get('image')
                 })
-            return jsonify(tracks)
-        return jsonify([])
+        
+        return jsonify(results)
     
     except Exception as e:
         return jsonify({'error': f'search failed: {str(e)}'}), 500
@@ -50,20 +54,36 @@ def download():
     if not song_id:
         return jsonify({'error': 'no id'}), 400
     
+    # Получаем ссылку на MP3
+    params = {
+        '__call': 'song.getDetails',
+        'ctx': 'wap6',
+        'pids': song_id,
+        '_format': 'json',
+        '_marker': '0',
+        'api_version': '4',
+    }
+    
     try:
-        link_data = run_async(saavn.get_song_direct_link(song_id))
-        mp3_url = link_data.get('link')
+        response = requests.get(JIO_SAVAN_API, params=params, timeout=15)
+        data = response.json()
         
-        if mp3_url:
-            response = requests.get(mp3_url, timeout=30)
-            return send_file(
-                io.BytesIO(response.content),
-                mimetype='audio/mpeg',
-                as_attachment=True,
-                download_name='track.mp3'
-            )
-        else:
-            return jsonify({'error': 'no link'}), 500
+        if data and song_id in data:
+            song = data[song_id]
+            mp3_url = song.get('more_info', {}).get('encrypted_media_url')
+            
+            if mp3_url:
+                # Скачиваем MP3
+                audio_response = requests.get(mp3_url, timeout=30)
+                return send_file(
+                    io.BytesIO(audio_response.content),
+                    mimetype='audio/mpeg',
+                    as_attachment=True,
+                    download_name=f"{song.get('title', 'track')}.mp3"
+                )
+        
+        return jsonify({'error': 'download failed'}), 500
+    
     except Exception as e:
         return jsonify({'error': f'download error: {str(e)}'}), 500
 

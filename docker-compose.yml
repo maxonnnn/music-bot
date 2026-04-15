@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  # 1. ГЕНЕРАТОР PO-ТОКЕНОВ (новый сервис)
+  pot-provider:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: pot-provider
+    ports:
+      - "4416:4416" # Порт, на котором будет висеть генератор токенов
+    restart: unless-stopped
+    networks:
+      - internal-net
+
+  # 2. ВАШ ОСНОВНОЙ PYTHON-СЕРВЕР (который уже есть)
+  music-bot:
+    build: .
+    container_name: music-bot
+    ports:
+      - "10000:10000"
+    depends_on:
+      - pot-provider
+    environment:
+      - POT_PROVIDER_URL=http://pot-provider:4416 # Даём знать серверу, где искать токены
+    networks:
+      - internal-net
+
+networks:
+  internal-net:
+    driver: bridge

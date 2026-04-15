@@ -1,58 +1,36 @@
 const express = require('express');
 const cors = require('cors');
-const { spawn } = require('child_process');
+const axios = require('axios');
+const fs = require('fs');
+
 const app = express();
-
 app.use(cors());
-app.use(express.json());
 
-// Адрес генератора токенов (замени на свой адрес)
-const POT_PROVIDER_URL = 'https://pot-provider-hi22.onrender.com'; // ⚠️ ЗАМЕНИ НА СВОЙ!
-
-// Функция получения PO токена
-async function getPoToken(videoId) {
-    try {
-        const response = await fetch(`${POT_PROVIDER_URL}/get_pot`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({})
-        });
-        const data = await response.json();
-        return data.poToken;
-    } catch (error) {
-        console.error('PO Token error:', error.message);
-        return null;
-    }
-}
+const YDLS_URL = process.env.YDLS_URL || 'https://ydls-latest-1.onrender.com';
+const COOKIE_PATH = process.env.COOKIE_PATH || '/app/cookies.txt'; // путь к кукам
 
 app.get('/download', async (req, res) => {
     const videoId = req.query.id;
     if (!videoId) return res.status(400).json({ error: 'no id' });
 
-    const poToken = await getPoToken(videoId);
-    
-    const args = [
-        '-f', 'bestaudio[ext=m4a]/bestaudio',
-        '--extract-audio',
-        '--audio-format', 'mp3',
-        '-o', '-',
-        `https://www.youtube.com/watch?v=${videoId}`
-    ];
-    
-    if (poToken) {
-        args.unshift('--extractor-args', `youtube:po_token=web.gvs+${poToken}`);
-        console.log(`✅ Использую PO Token для ${videoId}`);
+    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const ydlsUrl = `${YDLS_URL}/mp3/${encodeURIComponent(youtubeUrl)}`;
+
+    try {
+        // Передаём куки в ydls через заголовок Cookie
+        const cookieHeader = fs.existsSync(COOKIE_PATH) ? fs.readFileSync(COOKIE_PATH, 'utf8') : '';
+        
+        const response = await axios.get(ydlsUrl, {
+            responseType: 'stream',
+            headers: cookieHeader ? { Cookie: cookieHeader } : {}
+        });
+
+        res.setHeader('Content-Type', 'audio/mpeg');
+        response.data.pipe(res);
+    } catch (error) {
+        console.error('Download error:', error.message);
+        res.status(500).json({ error: error.message });
     }
-    
-    const ytdlp = spawn('yt-dlp', args);
-    res.setHeader('Content-Type', 'audio/mpeg');
-    ytdlp.stdout.pipe(res);
-    
-    ytdlp.stderr.on('data', (data) => console.error(`[yt-dlp] ${data}`));
-    ytdlp.on('close', (code) => {
-        if (code !== 0) console.error(`yt-dlp exit code: ${code}`);
-    });
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Server on port ${port}`));
+app.listen(3000, () => console.log('Proxy running on port 3000'));
